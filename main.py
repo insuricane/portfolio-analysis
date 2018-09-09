@@ -4,10 +4,12 @@ import math
 import pickle
 import warnings
 import json
-import sys
 warnings.filterwarnings('ignore')
 import model
 from shapely.geometry import shape, Point
+from flask import Flask
+from flask import request
+app = Flask(__name__)
 
 def probDestroyed(long, lat):
     ''' Return the conjunction pseudo-probability of both things destroyed'''
@@ -45,24 +47,27 @@ def calcJoint(rad):
         return 0.02
     return 0.0
 
+def comp(long, lat):
+    fl = pickle.load(open( "cached_probs.p", "rb" ) )
+    ex_home = (float(long), float(lat))
+    for i, row in fl.iterrows():
+        if calcJoint((distance(ex_home, (fl.loc[i, 'Longitude'], fl.loc[i, 'Latitude'])))) == 0:
+            fl = fl.drop(i)
+        else:
+            fl.loc[i, 'LFV'] = fl.loc[i, 'LFV'] * calcJoint((distance(ex_home, (fl.loc[i, 'Longitude'], fl.loc[i, 'Latitude']))))
 
-fl = pickle.load(open( "cached_probs.p", "rb" ) )
-ex_home = (float(sys.argv[1]), float(sys.argv[2]))
-for i, row in fl.iterrows():
-    if calcJoint((distance(ex_home, (fl.loc[i, 'Longitude'], fl.loc[i, 'Latitude'])))) == 0:
-        fl = fl.drop(i)
-    else:
-        fl.loc[i, 'LFV'] = fl.loc[i, 'LFV'] * calcJoint((distance(ex_home, (fl.loc[i, 'Longitude'], fl.loc[i, 'Latitude']))))
+    total = fl.groupby("ticker")["LFV"].sum()
 
-total = fl.groupby("ticker")["LFV"].sum()
+    caps = pd.read_csv("mktCap.csv")
+    caps = caps[caps["Ticker"].isin(total.index)]
+    caps['position'] = total.values / (caps['ValueBillions']) # account for volatility based on cap
+    caps['position'] = caps['position'] / caps['position'].sum() # normalize
 
-caps = pd.read_csv("mktCap.csv")
-caps = caps[caps["Ticker"].isin(total.index)]
-caps['position'] = total.values / (caps['ValueBillions']) # account for volatility based on cap
-caps['position'] = caps['position'] / caps['position'].sum() # normalize
+    houseProb = probDestroyed(float(long), float(lat))
+    return {"house_destroyed": float(houseProb), "positions": {i[0]:i[2] for i in caps.values}}
 
-houseProb = probDestroyed(float(sys.argv[1]), float(sys.argv[2]))
-
-toret = {"house_destroyed": float(houseProb), "positions": {i[0]:i[2] for i in caps.values}}
-
-print(json.dumps(toret))
+@app.route("/")
+def hello():
+    long = request.args.get('long')
+    lat = request.args.get('lat')
+    return json.dumps(comp(long, lat))

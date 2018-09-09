@@ -49,23 +49,25 @@ def calcJoint(rad):
     return 0.0
 
 def comp(long, lat):
+    factor = []
     fl = pickle.load(open( "cached_probs.p", "rb" ) )
     ex_home = (float(long), float(lat))
     for i, row in fl.iterrows():
-        if calcJoint((distance(ex_home, (fl.loc[i, 'Longitude'], fl.loc[i, 'Latitude'])))) == 0:
+        calc = calcJoint((distance(ex_home, (fl.loc[i, 'Longitude'], fl.loc[i, 'Latitude']))))
+        if calc == 0:
             fl = fl.drop(i)
         else:
-            fl.loc[i, 'LFV'] = fl.loc[i, 'LFV'] * calcJoint((distance(ex_home, (fl.loc[i, 'Longitude'], fl.loc[i, 'Latitude']))))
-
+            fl.loc[i, 'LFV'] = fl.loc[i, 'LFV'] * calc
+            factor.append(calc)
     total = fl.groupby("ticker")["LFV"].sum()
-
+    avg_factor = np.array(factor).mean()
     caps = pd.read_csv("mktCap.csv")
     caps = caps[caps["Ticker"].isin(total.index)]
     caps['position'] = total.values / (caps['ValueBillions']) # account for volatility based on cap
     caps['position'] = caps['position'] / caps['position'].sum() # normalize
-
+    
     houseProb = probDestroyed(float(long), float(lat))
-    return {"house_destroyed": float(houseProb), "positions": {i[0]:i[2] for i in caps.values}}
+    return {"house_destroyed": float(houseProb), "positions": {i[0]:i[2] for i in caps.values}, "avg_factor": avg_factor}
 
 @app.route("/")
 def hello():

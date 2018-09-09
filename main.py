@@ -8,6 +8,7 @@ warnings.filterwarnings('ignore')
 import model
 from shapely.geometry import shape, Point
 from flask import Flask
+import flask
 from flask import request
 app = Flask(__name__)
 
@@ -70,4 +71,6 @@ def comp(long, lat):
 def hello():
     long = request.args.get('long')
     lat = request.args.get('lat')
-    return json.dumps(comp(long, lat))
+    resp = flask.Response(json.dumps(comp(long, lat)))
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    return resp
